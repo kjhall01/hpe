@@ -35,7 +35,11 @@ def alignImages(im1, im2):
 		points1[i, :] = keypoints1[match.queryIdx].pt
 		points2[i, :] = keypoints2[match.trainIdx].pt
 	h, mask = cv2.findHomography(points1, points2, cv2.RANSAC)
-	height, width = im2.shape
+	try:
+		height, width = im2.shape
+	except:
+		height, width, channels = im2.shape
+
 	im1Reg = cv2.warpPerspective(im1, h, (width, height))
 	return im1Reg, h
 
@@ -56,6 +60,7 @@ parser.add_argument('--iter', type=int, default=1, help='test')
 parser.add_argument('--img', '-i', type=str, default='no', help='path of img file to convert')
 parser.add_argument('--output', '-o', type=str, default='out.txt', help='path of output file')
 parser.add_argument('--reg', '-r', type=bool, default=False, help='Whether to use registration to first file or not')
+parser.add_argument('--noise', '-n', type=bool, default=False, help='Whether to use noise reduction')
 
 args = parser.parse_args()
 
@@ -83,19 +88,38 @@ else:
 ndx, ndx2, pwd = 0,0, Path('.')
 displace(pwd / 'gray', rt='gray')
 
-def conv_gray(imgn, angle=0.0, reg=False, ref=None):
+def conv_gray(imgn, angle=0.0, reg=False, ref=None, noise=False):
 	img = cv2.imread(imgn)
 	gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 	if angle != 0.0 and not reg:
 		gray = rotate_image(gray, angle)
-	filename = './gray/' + imgn.split('/')[-1]
 	if reg:
 		imReg, h = alignImages(gray, ref)
-		cv2.imwrite(filename, imReg)
-		return imReg
+		next = imReg
 	else:
-		cv2.imwrite(filename, gray)
-		return gray
+		next = gray
+
+	if noise:
+		morph = next.copy()
+		kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
+		morph = cv2.morphologyEx(morph, cv2.MORPH_CLOSE, kernel)
+		morph = cv2.morphologyEx(morph, cv2.MORPH_OPEN, kernel)
+
+		kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+		image_channels = morph
+
+
+		channel_height, channel_width  = image_channels.shape
+		_, image_channels = cv2.threshold(image_channels, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
+		image_channels = np.reshape(image_channels, newshape=(channel_height, channel_width, 1))
+
+		#image_channels = np.concatenate((image_channels[0], image_channels[1], image_channels[2]), axis=2)
+		next = image_channels
+
+	filename = './gray/' + imgn.split('/')[-1]
+	cv2.imwrite(filename, next)
+	return next
+
 
 
 
@@ -113,14 +137,14 @@ else: # if multiple, rotate first file by n and then register to first file
 	files = [str(x.absolute()).split('/')[-1] for x in p if x.is_file()]
 	file0 = files.pop(0)
 	ndx += 1
-	ref = conv_gray(str((Path(pwd / 'imgs') / file0)), angle=args.angle)
+	ref = conv_gray(str((Path(pwd / 'imgs') / file0)), angle=args.angle, noise=args.noise)
 	for file in files:
 		ndx += 1
 		if ndx >= steps[ndx2]:
 			print('graying & rotating imgs [' +ndx2*'*' + ' '*(10-ndx2) +']', end='\r')
 			ndx2+=1
 		sys.stdout.flush()
-		conv_gray(str((Path(pwd / 'imgs') / file)), reg=args.reg, ref=ref )
+		conv_gray(str((Path(pwd / 'imgs') / file)), reg=args.reg, ref=ref, noise=args.noise )
 	print('graying & rotating imgs [**********]')
 
 ndx, ndx2, pwd = 0,0, Path('.')
