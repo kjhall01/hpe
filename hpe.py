@@ -38,7 +38,7 @@ if args.img == 'no':
 		if ndx >= steps[ndx2]:
 			print('converting imgs [' +ndx2*'*' + ' '*(10-ndx2) +']', end='\r')
 			ndx2+=1
-		page.save("./imgs/page_{}.jpg".format(ndx),"jpeg")
+		page.save("./imgs/page_{:03}.jpg".format(ndx),"jpeg")
 	print('converting imgs [**********]')
 
 else:
